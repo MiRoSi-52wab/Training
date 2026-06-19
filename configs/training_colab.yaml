@@ -22,7 +22,7 @@ test_path:  /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
 
 # T4 GPU has 16 GB VRAM — batch_size=32 fits comfortably with checkpointing.
 # Raise to 64 on A100 (40/80 GB), lower to 8 if you hit OOM for any reason.
-batch_size:  16
+batch_size:  32     # T4 has 16 GB VRAM; B=32 + checkpointing uses ~1.2 GB — safe
 num_workers: 1      # Colab gives 2 CPU cores; set 0 if you see DataLoader errors
 
 # ── Model (KANTauTheta, shared=True = 3 trainable parameters) ─────────────────
@@ -52,7 +52,7 @@ K: 140
 use_checkpointing: true
 
 # ── Optimizer / schedule ──────────────────────────────────────────────────────
-n_epochs: 100
+n_epochs: 40        # 40 × ~90s/epoch ≈ 60 min on T4 — fits in free Colab session
 lr: 1.0e-3
 lr_min: 1.0e-5
 weight_decay: 0.0    # ctrl points parametrize φ(x); decaying toward 0 biases
