@@ -29,6 +29,15 @@ num_workers: 1      # Colab gives 2 CPU cores; set 0 if you see DataLoader error
 shared: true    # Study 2 first pass: all edges share one [c₀,c₁,c₂]
 R: 1.0
 
+# Study 2 ctrl initialization.
+# "exact"  → [1,-1,1] (model starts at the correct answer — not a recovery test)
+# "random" → uniform U(-1,1) per component, seeded by 'seed' above
+# "zero"   → [0,0,0]
+# [c0,c1,c2] → specific wrong starting point, e.g. [0.5, 0.5, 0.5]
+#
+# Use anything other than "exact" to make this a genuine recovery test.
+ctrl_init: [0.5, 0.5, 0.5]   # all-positive: clearly wrong sign on c₁
+
 # K = number of fixed LS iterations in forward().
 # Calibrated against dataset_v3 (alpha0=10.0 in both FFT solver and LSFNO):
 #   FFT solver n_iter: min=101  mean=109  p90=112  p99=115  max=120

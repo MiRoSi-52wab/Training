@@ -95,6 +95,24 @@ class Trainer:
             n_comp=n_comp,
         )
         self.model = LSFNO.from_config(config, tau_theta=tau_theta).to(self.device)
+
+        # Override ctrl initialization if requested (default "exact" = [1,-1,1]).
+        # For Study 2, use a wrong starting point to test gradient-descent recovery.
+        ctrl_init = config.get("ctrl_init", "exact")
+        if ctrl_init != "exact":
+            with torch.no_grad():
+                ctrl = self.model.tau_theta.ctrl
+                if ctrl_init == "random":
+                    torch.manual_seed(int(config.get("seed", 42)))
+                    ctrl.data = torch.rand_like(ctrl) * 2.0 - 1.0
+                elif ctrl_init == "zero":
+                    ctrl.data.zero_()
+                elif isinstance(ctrl_init, (list, tuple)):
+                    ctrl.data = torch.tensor(ctrl_init, dtype=ctrl.dtype, device=ctrl.device)
+                else:
+                    raise ValueError(f"Unknown ctrl_init: {ctrl_init!r}. "
+                                     f"Use 'exact', 'random', 'zero', or a list [c0,c1,c2].")
+            print(f"ctrl_init='{ctrl_init}' → ctrl = {self.model.tau_theta.ctrl.detach().cpu().numpy()}")
         self.n_normal = self.model.n_normal
         self.use_checkpointing = bool(config.get("use_checkpointing", False))
 
