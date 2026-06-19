@@ -1,0 +1,72 @@
+# Study 2 — Colab/Kaggle training config.
+#
+# Inherits all physics from experiment.yaml (dim, N, kappa, material params,
+# tol, max_iter). Only the data paths, hardware, and output settings differ
+# from the local prototype.
+#
+# BEFORE RUNNING: update the three paths under "Data" to match where you
+# placed dataset_v3.h5 on Google Drive (or on Kaggle input).
+#
+# Run (from the LS_KAN_FNO repo root inside Colab):
+#   python -m training.train --config configs/training_colab.yaml
+
+experiment: experiment.yaml   # inherit dim, N, kappa, material params, tol, max_iter
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+# Edit these three paths to match your Drive layout.
+# The notebook cell "§3 Configure paths" sets DATA_PATH and patches these
+# automatically — you only need to edit here if running from the CLI directly.
+train_path: /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
+val_path:   /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
+test_path:  /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
+
+# T4 GPU has 16 GB VRAM — batch_size=32 fits comfortably with checkpointing.
+# Raise to 64 on A100 (40/80 GB), lower to 8 if you hit OOM for any reason.
+batch_size:  16
+num_workers: 1      # Colab gives 2 CPU cores; set 0 if you see DataLoader errors
+
+# ── Model (KANTauTheta, shared=True = 3 trainable parameters) ─────────────────
+shared: true    # Study 2 first pass: all edges share one [c₀,c₁,c₂]
+R: 1.0
+
+# K = number of fixed LS iterations in forward().
+# Calibrated against dataset_v3 (alpha0=10.0 in both FFT solver and LSFNO):
+#   FFT solver n_iter: min=101  mean=109  p90=112  p99=115  max=120
+#   K=140 gives a comfortable margin over p99=115.
+K: 140
+
+# Gradient checkpointing is needed even on GPU.
+# Without it: 141 tau_theta calls unrolled simultaneously → each creates
+# (32,3,3,64,64) float64 tensors (~126 MB peak per call) → 141×126 ≈ 17.8 GB,
+# exceeding the T4's 16 GB VRAM. With checkpointing: one call active at a time
+# → ~337 MB peak total. No effect on the result, ~30% more FLOPs.
+use_checkpointing: true
+
+# ── Optimizer / schedule ──────────────────────────────────────────────────────
+n_epochs: 100
+lr: 1.0e-3
+lr_min: 1.0e-5
+weight_decay: 0.0    # ctrl points parametrize φ(x); decaying toward 0 biases
+                     # away from the correct [1,-1,1] answer, so keep at 0.
+lambda_field: 1.0
+lambda_eff:   0.1
+
+lbfgs_phase:      false   # leave off for shared=True (3 params); enable for
+lbfgs_steps:      30      # the shared=False follow-up run (27 params).
+lbfgs_batch_size: 4
+
+# ── Output / logging ──────────────────────────────────────────────────────────
+# Set to a Drive path so checkpoints survive Colab session timeouts.
+# The notebook patches this automatically from the RUN_DIR variable.
+output_dir: /content/drive/MyDrive/ls_kan_fno/runs/linear_study2
+
+checkpoint_every:       10
+val_every:               1
+gamma_theta_check_every: 5   # contractivity gate — see training/metrics.py
+
+# W&B is optional. Install with !pip install wandb and set use_wandb: true
+# after logging in with !wandb login.
+use_wandb:      false
+wandb_project:  ls_kan_fno
+
+seed: 42

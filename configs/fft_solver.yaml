@@ -1,0 +1,11 @@
+# FFT solver runtime configuration
+# Used by run_tests.py and any evaluation script that calls fft_solver.solve()
+# directly (iteration-count study, comparison with LS-FNO).
+#
+# tol and max_iter are inherited from experiment.yaml so they stay in sync with
+# ls_fno.yaml for a fair iteration-count comparison (Table 3 of the paper).
+# data.yaml overrides these with tighter values for ground-truth generation.
+#
+# Reference: Nguyen & Schneider (2025), arXiv:2507.12233v2, page 18.
+
+experiment: experiment.yaml   # inherit tol, max_iter (evaluation stopping criterion)

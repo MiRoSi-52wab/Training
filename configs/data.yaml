@@ -1,0 +1,44 @@
+# Data generation configuration for LS-KAN-FNO
+# Run: python -m generation.generate_dataset --config configs/data.yaml
+#
+# Shared physics (N, kappa, E_matrix, nu_*, eps_bar_scale) are inherited from
+# experiment.yaml via utils/config_loader.load_config().  Only dataset-
+# generation-specific settings live here.
+
+experiment: experiment.yaml   # inherit N, kappa, material params, eps_bar_scale
+
+# ── Macroscopic strain loading ─────────────────────────────────────────────────
+# Controls how eps_bar is chosen for each sample.
+# Options:
+#   random   — all n_comp components drawn uniformly from [-eps_bar_scale, +eps_bar_scale]
+#   unit     — cycles through unit directions: sample k → scale * e_{k % n_comp}
+#              (no extra config needed; gives balanced coverage of all directions)
+#   explicit — every sample uses the exact vector below; change eps_bar to taste
+#              2D example: eps_bar: [0.01, 0.0, 0.0]   (pure ε₁₁)
+#              3D example: eps_bar: [0.01, 0.0, 0.0, 0.0, 0.0, 0.0]
+loading_mode: random
+# eps_bar: [0.01, 0.0, 0.0]   # uncomment to use and set loading_mode: explicit 
+
+# ── Microstructure geometry ────────────────────────────────────────────────────
+inclusion_type: disk   # 'disk' or 'ellipse'
+n_inclusions: 10
+r_min: 2.0             # min radius (pixels)
+r_max: 6.0             # max radius (pixels)
+
+# ── Dataset size ───────────────────────────────────────────────────────────────
+n_samples: 2000
+val_fraction: 0.1
+test_fraction: 0.1
+
+# ── FFT solver for ground-truth generation ─────────────────────────────────────
+# Intentionally tighter than the evaluation settings in experiment.yaml so that
+# stored solutions are high-quality references for the model comparison.
+tol: 1.0e-7
+max_iter: 3000
+
+# ── Output ─────────────────────────────────────────────────────────────────────
+output_dir: data/raw
+tag: v1
+
+# ── Reproducibility ────────────────────────────────────────────────────────────
+seed: 42

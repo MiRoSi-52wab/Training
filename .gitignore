@@ -1,0 +1,47 @@
+# ── Generated data (too large for git; regenerate locally or on Colab) ───────
+data/raw/
+data/processed/
+
+# ── Training outputs (regenerated each run) ───────────────────────────────────
+runs/
+study_results/
+
+# ── Large binary artifacts ────────────────────────────────────────────────────
+*.h5
+*.pt
+*.npz
+*.npy
+*.pkl
+
+# ── Python build artefacts ────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Jupyter / IPython ─────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Editors and OS ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.venv/
+env/
+
+# ── Temporary plots and misc outputs ─────────────────────────────────────────
+my_plot.png
+*.png.tmp

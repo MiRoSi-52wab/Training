@@ -1,0 +1,30 @@
+# LS-FNO hyperparameters
+# Reference: Nguyen & Schneider (2025), arXiv:2507.12233v2
+#
+# Shared physics (N → grid_size, kappa, E_matrix, nu_*, eps_bar_scale) and
+# evaluation stopping (tol, max_iter) are inherited from experiment.yaml via
+# utils/config_loader.load_config().
+#
+# alpha_minus and alpha_plus are computed from material parameters by
+# LSFNO.from_config() and are NOT stored here to avoid silent staleness when
+# kappa or nu changes.  grid_size is taken from N (experiment.yaml).
+
+experiment: experiment.yaml   # inherit N, kappa, material params, tol, max_iter
+
+# ── Architecture ─────────────────────────────────────────────────────────────
+K: 4       # Fourier neural layers (LS iterations after the embedding).
+           # Total Green-operator applications = K+1.
+           # Rule of thumb: K ≈ 2·ln(1/δ_target) / ln(1/γ), γ = (κ−1)/(κ+1).
+           # For κ=10: γ≈0.82; K=4 gives ~4 decades of iteration-error reduction.
+
+m: 11       # Depth of the Yarotsky ReLU square-function network.
+           # Error ~ 4^{−m}:  m=7 → 6e-5,  m=9 → 4e-6 (default),  m=11 → 2e-7.
+           # Higher m is slower per forward pass but more accurate.
+
+M: 1.0     # Strain calibration cutoff for τ_θ.
+           # The Yarotsky construction is accurate for ‖ε‖ ≤ M.
+           # Match to the maximum expected strain magnitude in the dataset.
+           # Paper uses M=1.0 (suitable for macroscopic strain ≤ 100%).
+           # For small-strain datasets (eps_bar_scale=0.01) this means the
+           # network uses only 1% of its calibrated range — known degradation
+           # (see §5.2.4); Phase 3 KAN replacement addresses this.

@@ -1,0 +1,42 @@
+# Experiment configuration — single source of truth for shared parameters.
+#
+# This file defines the physical problem.  All solver and dataset configs
+# reference it via `experiment: experiment.yaml` and inherit these values.
+# Per-config overrides are applied on top (see utils/config_loader.py).
+#
+# When replicating paper results at a different κ, grid, or strain range,
+# change ONLY this file.  All dependent configs update automatically.
+
+# ── Dimensionality ────────────────────────────────────────────────────────────
+dim: 2              # spatial dimension: 2 (plane-strain) or 3 (full 3D)
+                    # 2D uses 3 independent strain components (ε₁₁, ε₂₂, γ₁₂)
+                    # 3D uses 6 independent strain components (ε₁₁…ε₃₃, γ₂₃, γ₁₃, γ₁₂)
+
+# ── Grid ──────────────────────────────────────────────────────────────────────
+N: 64               # spatial grid dimension (N×N for 2D, N×N×N for 3D)
+
+# ── Material parameters ───────────────────────────────────────────────────────
+kappa: 10.0         # stiffness contrast  κ = E_inclusion / E_matrix
+E_matrix: 1.0       # reference Young's modulus (GPa or dimensionless)
+nu_matrix: 0.3      # Poisson's ratio — matrix phase
+nu_inclusion: 0.3   # Poisson's ratio — inclusion phase
+
+# ── Strain loading ─────────────────────────────────────────────────────────────
+eps_bar_scale: 0.01 # macroscopic strain components sampled from [-scale, +scale]
+
+# ── Discretization scheme ─────────────────────────────────────────────────────
+# Controls how the Fourier-space Green operator maps frequencies to ξ̂.
+#   exact      — standard exact Fourier frequencies (default)
+#   staggered  — Willot (2015) rotated staggered grid; improves accuracy near
+#                sharp phase interfaces by using effective frequencies:
+#                  ξ_eff_x = sin(π f_x)·cos(π f_y)  [2D]
+#                  ξ_eff_x = sin(π f_x)·cos(π f_y)·cos(π f_z)  [3D]
+#                (must be set to the same value for both data generation and LS-FNO)
+discretization: exact
+
+# ── Evaluation stopping criterion ─────────────────────────────────────────────
+# Shared between FFT solver and LS-FNO so iteration counts are directly
+# comparable (Table 3 of Nguyen & Schneider 2025, arXiv:2507.12233v2, p.18).
+# data.yaml OVERRIDES these with tighter values for ground-truth generation.
+tol: 1.0e-5         # relative residual threshold ‖ξ_k − ξ_{k-1}‖ / ‖ξ_k‖ < tol
+max_iter: 2000      # hard cap on iterations

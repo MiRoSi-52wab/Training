@@ -1,0 +1,73 @@
+# Study 2 prototype: train KANTauTheta's control points and verify they
+# recover the exact bilinear contraction T:eps from FFT-generated data.
+#
+# Shared physics (dim, N, kappa, E_matrix, nu_*, eps_bar_scale, tol, max_iter)
+# are inherited from experiment.yaml via utils/config_loader.load_config().
+#
+# Run: python -m training.train --config configs/training_linear_prototype.yaml
+
+experiment: experiment.yaml   # inherit dim, N, kappa, material params, tol, max_iter
+
+# ── Data ───────────────────────────────────────────────────────────────────
+# dataset_v3.h5 uses the same Theorem 2.1 alpha0=10.0 as the LSFNO, so the
+# stored n_iter values (101-120, mean≈109) are directly comparable to K.
+train_path: data/raw/dataset_v3.h5
+val_path: data/raw/dataset_v3.h5
+test_path: data/raw/dataset_v3.h5
+batch_size: 8    # lowered from 16 after an OOM kill on a 6.7GB-RAM box; see
+                 # use_checkpointing note below — raise back once that's confirmed safe
+num_workers: 0   # safe default for local CPU runs; raise on a GPU session
+
+# ── Model (tau_theta = KANTauTheta) ──────────────────────────────────────────
+shared: true     # Study 2 first pass: all edges share 1 set of 3 control
+                 # points (KAN_Architecture_Theory.md's literal Study 2 test —
+                 # confirm gradient descent recovers [1,-1,1]). Set false for
+                 # the 27-independent-edge follow-up run.
+R: 1.0
+# K = number of LS/Fourier layers for the fixed-depth training forward().
+# Calibrated empirically, not guessed: dataset_v1.h5's own stored n_iter
+# (FFT solver, same kappa=10 microstructures) ranges 9-13 at tol=1e-7.
+# K=20 gives full convergence with margin. Re-measure n_iter and re-pick K
+# if you point this config at a dataset with a different contrast/volume-
+# fraction range.
+# K calibration history:
+#  v1: stale dataset (n_iter=9-13 stored but wrong); K=20 was set before fix.
+#  v2: regenerated with current solver; FFT used alpha0≈7.4 (heuristic) →
+#      n_iter=76-90. But LSFNO uses alpha0=10.0 (Theorem 2.1) → solve() needed
+#      ~112 iters. Mismatch made comparison unfair.
+#  v3 (current): FFT solver also uses alpha0=10.0 (Theorem 2.1, same as LSFNO).
+#      n_iter: min=101, mean=109, p90=112, p99=115, max=120.
+#      K=140 gives a safe margin over the p99=115 / max=120.
+K: 140
+# KANTauTheta upcasts to float64 and broadcasts to the full (n,n) pairwise
+# shape internally (9 tensors of shape (B,3,3,N,N) per tau_theta call, called
+# K+1 times) -- this OOM-killed an unrolled, uncheckpointed K=20 run on this
+# 6.7GB-RAM box, and is essential now that K=140. Checkpointing recomputes
+# each layer's internals during backward instead of storing all K at once.
+use_checkpointing: true
+
+# ── Optimizer / schedule ──────────────────────────────────────────────────
+n_epochs: 100
+lr: 1.0e-3
+lr_min: 1.0e-5
+# KAN control points directly parametrize phi(x) (target: [1,-1,1] = x²).
+# Decaying them toward 0 would bias away from the correct answer, so this
+# deliberately deviates from the generic AdamW default of nonzero decay.
+weight_decay: 0.0
+lambda_field: 1.0
+lambda_eff: 0.1
+
+lbfgs_phase: false     # leave off for the shared=True (3-param) prototype;
+lbfgs_steps: 30        # worth trying once shared=false (27 params).
+lbfgs_batch_size: 4
+
+# ── Output / logging ──────────────────────────────────────────────────────
+output_dir: runs/linear_prototype_kan_shared
+checkpoint_every: 10
+val_every: 1
+gamma_theta_check_every: 5   # non-optional contractivity check, see training/metrics.py
+
+use_wandb: false             # local JSON-lines logger by default; flip on
+wandb_project: ls_kan_fno    # once wandb is installed and you've logged in
+
+seed: 42
