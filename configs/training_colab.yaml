@@ -36,7 +36,9 @@ R: 1.0
 # [c0,c1,c2] → specific wrong starting point, e.g. [0.5, 0.5, 0.5]
 #
 # Use anything other than "exact" to make this a genuine recovery test.
-ctrl_init: [0.5, 0.5, 0.5]   # all-positive: clearly wrong sign on c₁
+ctrl_init: [0.0, 0.0, 0.0]   # zero null-mode component → recovers exactly [1,-1,1]
+# Note: [0.5,0.5,0.5] has φ(0)=0.5 (pure Γ-null-mode) which contaminates ctrl at convergence.
+# [0,0,0] has φ(0)=0, same as exact [1,-1,1], so gradient recovers signal only.
 
 # K = number of fixed LS iterations in forward().
 # Calibrated against dataset_v3 (alpha0=10.0 in both FFT solver and LSFNO):

@@ -111,11 +111,18 @@ def recover(
 
     if shared:
         ctrl = ctrl_raw.numpy()                    # (3,)
-        delta_ctrl = np.abs(ctrl - EXACT_CTRL)
+        # The Γ operator kills uniform fields, so φ(x)+C gives identical training loss for
+        # any constant C. The null-mode offset is φ(0) = c₀/4 + c₁/2 + c₂/4.
+        # Subtract it before comparing to exact [1,−1,1] so that [1.5,−0.5,1.5] → [1,−1,1].
+        null_offset = ctrl[0] / 4.0 + ctrl[1] / 2.0 + ctrl[2] / 4.0
+        ctrl_normalized = ctrl - null_offset   # projects out the Γ-null mode
+        delta_ctrl = np.abs(ctrl_normalized - EXACT_CTRL)
         print(f"\n  Control points (shared across all edges):")
-        print(f"    Trained:  [{ctrl[0]:+.6f}, {ctrl[1]:+.6f}, {ctrl[2]:+.6f}]")
-        print(f"    Exact:    [{EXACT_CTRL[0]:+.6f}, {EXACT_CTRL[1]:+.6f}, {EXACT_CTRL[2]:+.6f}]")
-        print(f"    δ_ctrl:   [{delta_ctrl[0]:.2e}, {delta_ctrl[1]:.2e}, {delta_ctrl[2]:.2e}]"
+        print(f"    Trained:     [{ctrl[0]:+.6f}, {ctrl[1]:+.6f}, {ctrl[2]:+.6f}]")
+        print(f"    Null offset: φ(0) = {null_offset:+.6f}  (Γ-invisible constant)")
+        print(f"    Normalized:  [{ctrl_normalized[0]:+.6f}, {ctrl_normalized[1]:+.6f}, {ctrl_normalized[2]:+.6f}]")
+        print(f"    Exact:       [{EXACT_CTRL[0]:+.6f}, {EXACT_CTRL[1]:+.6f}, {EXACT_CTRL[2]:+.6f}]")
+        print(f"    δ_ctrl:      [{delta_ctrl[0]:.2e}, {delta_ctrl[1]:.2e}, {delta_ctrl[2]:.2e}]"
               f"  max = {delta_ctrl.max():.2e}")
     else:
         ctrl_np = ctrl_raw.numpy()                 # (3, n, n)
@@ -146,10 +153,13 @@ def recover(
         print(f"    (φ(x) plot shows edge (0,0); all {n*n} edges have similar shape)")
 
     phi_exact = x_np ** 2
-    delta_phi_max = float(np.abs(phi_learned - phi_exact).max())
+    # Compare with the null-offset removed — the physically meaningful difference
+    phi_learned_centered = phi_learned - null_offset if shared else phi_learned
+    delta_phi_max = float(np.abs(phi_learned_centered - phi_exact).max())
 
     print(f"\n  φ(x) reconstruction over x ∈ [-1, 1]:")
-    print(f"    max |φ_learned(x) − x²| = {delta_phi_max:.2e}")
+    print(f"    Null offset removed: {null_offset:+.4f}")
+    print(f"    max |φ_centered(x) − x²| = {delta_phi_max:.2e}")
 
     # ── Fit to candidate library ──────────────────────────────────────────────
     print(f"\n  Candidate library fit  φ(x) ≈ a·f(x) + b:")
@@ -193,7 +203,8 @@ def recover(
     print(f"{'='*60}\n")
 
     if plot:
-        _plot(x_np, phi_learned, phi_exact, ctrl, delta_ctrl, epoch, checkpoint_path)
+        _plot(x_np, phi_learned, phi_learned_centered, phi_exact,
+              ctrl, ctrl_normalized, null_offset, delta_ctrl, epoch, checkpoint_path)
 
     return {
         "ctrl":          ctrl,
@@ -209,7 +220,8 @@ def recover(
 
 # ── Plotting ──────────────────────────────────────────────────────────────────
 
-def _plot(x, phi_learned, phi_exact, ctrl, delta_ctrl, epoch, checkpoint_path):
+def _plot(x, phi_learned, phi_learned_centered, phi_exact,
+          ctrl, ctrl_normalized, null_offset, delta_ctrl, epoch, checkpoint_path):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -218,26 +230,29 @@ def _plot(x, phi_learned, phi_exact, ctrl, delta_ctrl, epoch, checkpoint_path):
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
-    # Left panel: learned vs exact φ(x)
+    # Left panel: centered learned vs exact φ(x)
     ax = axes[0]
-    ax.plot(x, phi_exact,   "k-",  lw=2,   label="Exact:  $x^2$")
-    ax.plot(x, phi_learned, "r--", lw=2,
-            label=f"Learned: ctrl=[{ctrl[0]:.3f}, {ctrl[1]:.3f}, {ctrl[2]:.3f}]")
+    ax.plot(x, phi_exact,           "k-",  lw=2, label="Exact:  $x^2$")
+    ax.plot(x, phi_learned,         "r:",  lw=1.5,
+            label=f"Learned (raw): ctrl=[{ctrl[0]:.3f}, {ctrl[1]:.3f}, {ctrl[2]:.3f}]")
+    ax.plot(x, phi_learned_centered,"r--", lw=2,
+            label=f"Learned (−{null_offset:+.3f}): ctrl=[{ctrl_normalized[0]:.3f}, "
+                  f"{ctrl_normalized[1]:.3f}, {ctrl_normalized[2]:.3f}]")
     ax.set_xlabel("x")
     ax.set_ylabel("φ(x)")
     ax.set_title(f"Edge function — epoch {epoch}")
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
 
-    # Right panel: residual φ_learned(x) − x²
-    residual = phi_learned - phi_exact
+    # Right panel: residual after null-offset removal
+    residual = phi_learned_centered - phi_exact
     ax = axes[1]
     ax.plot(x, residual, "b-", lw=1.5)
     ax.axhline(0, color="k", lw=0.8, ls="--")
     ax.fill_between(x, residual, alpha=0.15, color="blue")
     ax.set_xlabel("x")
-    ax.set_ylabel("$\\phi_{\\mathrm{learned}}(x) - x^2$")
-    ax.set_title(f"Residual  (max = {np.abs(residual).max():.2e})")
+    ax.set_ylabel("$\\phi_{\\mathrm{centered}}(x) - x^2$")
+    ax.set_title(f"Residual after null-offset removal  (max = {np.abs(residual).max():.2e})")
     ax.grid(True, alpha=0.3)
 
     plt.suptitle(f"Study 2 — Symbolic Recovery  (epoch {epoch})", fontsize=12, y=1.01)
