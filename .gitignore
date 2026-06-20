@@ -5,6 +5,7 @@ data/processed/
 # ── Training outputs (regenerated each run) ───────────────────────────────────
 runs/
 study_results/
+study_results_linear/
 
 # ── Large binary artifacts ────────────────────────────────────────────────────
 *.h5
@@ -45,3 +46,13 @@ env/
 # ── Temporary plots and misc outputs ─────────────────────────────────────────
 my_plot.png
 *.png.tmp
+
+# -- Markdown files ----------
+FREEFORM_KAN_CONTRACTION_DISCOVERY.md
+
+## -- non-training relevant files
+study/linear_kan_fno_solver.py
+study/linear_runner.py
+study/linear_scenarios.py
+study/run_linear_study.py
+
