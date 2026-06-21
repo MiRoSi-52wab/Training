@@ -9,21 +9,30 @@ internals, works inside LSFNO unchanged.
 Architecture
 ------------
 Input side:
-  • Flatten T  (n×n) per voxel → n²  features
+  • Extract upper-triangular T (n×n) per voxel → n(n+1)/2 features
+    (T is symmetric in Mandel notation, so only 6 independent values for n=3)
   • Flatten ε  (n)   per voxel → n   features
-  • Concatenate: n²+n features total
+  • Concatenate: n(n+1)/2 + n features total  (9 for n=3, vs 12 before)
   • Optional element-wise scale (eps_input_scale) to bring ε to the same
     magnitude as T before the B-spline grid.
 Core:
-  • Stack of BSplineKANLayers: [n²+n] → [width₁] → ... → [n]
+  • Stack of BSplineKANLayers: [n(n+1)/2+n] → [width₁] → ... → [n]
   • Each layer uses degree-k B-splines + a SiLU residual per (in→out) edge
 Output:
   • Reshape → (B, n, *spatial): polarization stress ξ = τ_θ(T, ε)
 
 Parameter count (n_comp=3, G=5, k=3, depth-1 width=[18]):
-  Layer 1  (12→18): 18×12×8 spline + 18×12 base = 1728 + 216 = 1,944
-  Layer 2  (18→ 3):  3×18×8 spline +  3×18 base =  432 +  54 =   486
-  Total: 2,430 parameters
+  Layer 1  (9→18): 18×9×8 spline + 18×9 base = 1296 + 162 = 1,458
+  Layer 2  (18→3):  3×18×8 spline +  3×18 base =  432 +  54 =   486
+  Total: 1,944 parameters
+  (cf. old 12-input version: 2,430 params)
+
+Theoretical minimum hidden width for 1-hidden-layer (depth-2 KAN) to represent
+the full T:ε contraction via the polarization identity: 18 neurons.
+Reasoning: n_comp=3 with symmetric T has 9 unique scalar products; each
+needs 2 hidden neurons (sum + difference) → 9×2 = 18.
+With 9 inputs the active-edge fraction in L1 is 36/162 = 22%,
+vs 18/216 = 8% with the old 12-input version — easier to find by optimisation.
 
 References
 ----------
@@ -248,11 +257,21 @@ class FreeFormKANTauTheta(nn.Module):
         self.k = k
         self.eps_input_scale = eps_input_scale
 
-        if width is None:
-            # Depth-1 default: H ≈ 1.5 × input_dim, rounded to multiple of n_comp
-            width = [max(n_comp * (n_comp + 1), 12)]
+        # Upper-triangular indices of the n×n T matrix (row-major).
+        # T is symmetric in Mandel notation, so we only feed the 6 independent
+        # components (for n=3) rather than all 9.
+        n = n_comp
+        triu_idx = torch.tensor(
+            [i * n + j for i in range(n) for j in range(i, n)],
+            dtype=torch.long,
+        )
+        self.register_buffer("_triu_idx", triu_idx)
 
-        input_dim  = n_comp * n_comp + n_comp
+        if width is None:
+            # Default depth-1: 18 = theoretical minimum for n_comp=3
+            width = [2 * n_comp * (n_comp + 1) // 2]  # 2 × n_T_features
+
+        input_dim  = n_comp * (n_comp + 1) // 2 + n_comp  # 6+3=9 for n=3
         output_dim = n_comp
 
         dims = [input_dim] + list(width) + [output_dim]
@@ -270,7 +289,8 @@ class FreeFormKANTauTheta(nn.Module):
 
     @property
     def n_T_features(self) -> int:
-        return self.n_comp ** 2
+        """Number of independent T components fed to the KAN (upper triangle)."""
+        return self.n_comp * (self.n_comp + 1) // 2
 
     def _flatten_inputs(
         self, T: torch.Tensor, eps: torch.Tensor
@@ -278,10 +298,12 @@ class FreeFormKANTauTheta(nn.Module):
         """
         Flatten T and ε over spatial dims, scale ε, and concatenate.
 
-        T:   (B, n, n, *sp)  → T_flat:  (B*N_sp, n²)
-        eps: (B, n, *sp)     → eps_flat: (B*N_sp, n)  [× eps_input_scale]
+        T:   (B, n, n, *sp)  → T_triu: (B*N_sp, n(n+1)/2)   [upper triangle only]
+        eps: (B, n, *sp)     → e_flat: (B*N_sp, n)           [× eps_input_scale]
 
-        Returns (x, B, spatial) where x is (B*N_sp, n²+n).
+        Returns (x, B, spatial) where x is (B*N_sp, n(n+1)/2 + n).
+        T is symmetric in Mandel notation, so feeding only the 6 independent
+        components (for n=3) avoids duplicating T₀₁/T₁₀, T₀₂/T₂₀, T₁₂/T₂₁.
         """
         B = T.shape[0]
         n = T.shape[1]
@@ -290,11 +312,14 @@ class FreeFormKANTauTheta(nn.Module):
         for s in spatial:
             N_sp *= s
 
-        T_flat = (
+        # Full flatten then select upper-triangular indices
+        T_full = (
             T.reshape(B, n * n, N_sp)
              .permute(0, 2, 1)
              .reshape(B * N_sp, n * n)
         )
+        T_triu = T_full[:, self._triu_idx]   # (B*N_sp, n(n+1)/2)
+
         e_flat = (
             eps.reshape(B, n, N_sp)
                .permute(0, 2, 1)
@@ -303,7 +328,7 @@ class FreeFormKANTauTheta(nn.Module):
         if self.eps_input_scale != 1.0:
             e_flat = e_flat * self.eps_input_scale
 
-        x = torch.cat([T_flat, e_flat], dim=-1)   # (B*N_sp, n²+n)
+        x = torch.cat([T_triu, e_flat], dim=-1)   # (B*N_sp, n(n+1)/2 + n)
         return x, B, spatial
 
     # ── forward ──────────────────────────────────────────────────────────────
@@ -426,6 +451,8 @@ def _verify() -> None:
     model = FreeFormKANTauTheta(n_comp=n, width=[18], grid_size=5, k=3)
     print(model)
     print(f"  Per-layer params: {model.layer_param_counts()}")
+    assert model._dims[0] == n * (n + 1) // 2 + n, \
+        f"Expected input_dim={n*(n+1)//2+n}, got {model._dims[0]}"
 
     xi = model(T, eps)
     assert xi.shape == (B, n, N, N), f"shape mismatch: {xi.shape}"
