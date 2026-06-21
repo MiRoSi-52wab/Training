@@ -53,10 +53,10 @@ eps_input_scale: 100.0
 # The L1 penalty pushes the other 126 toward zero, making the active edges
 # easier to find.  Suggested starting range: 1e-4 to 1e-3.
 # Too large (> 0.01) → all edges collapse to zero.
-sparsity_lambda: 0.0
+sparsity_lambda: 5.0e-3
 
 # ── Optimizer / schedule (Adam phase) ─────────────────────────────────────────
-n_steps:      20000    # Adam gradient steps (not epochs — data is sampled per step)
+n_steps:     5000    # Adam gradient steps (not epochs — data is sampled per step)
 lr:           1.0e-3
 lr_min:       1.0e-5   # CosineAnnealingLR min LR
 weight_decay: 0.0
