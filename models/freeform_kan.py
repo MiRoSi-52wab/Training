@@ -357,6 +357,55 @@ class FreeFormKANTauTheta(nn.Module):
         )
         return xi.to(orig_dtype)
 
+    # ── sparsity regularization ───────────────────────────────────────────────
+
+    def sparsity_loss(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        L1 regularization on edge function magnitudes (pykan Eq. 3.5).
+
+        For every edge (i→j) in every layer, computes the mean absolute value
+        of φᵢⱼ(xₙ) over the batch, then sums across all edges and layers:
+
+            L_sparse = Σₗ Σᵢⱼ  (1/N Σₙ |φᵢⱼ⁽ˡ⁾(xₙ)|)
+
+        This promotes group sparsity: edges that do not contribute to the task
+        loss are pushed to φ ≡ 0 entirely (the L1 norm has constant gradient
+        at any non-zero magnitude, unlike L2 which has diminishing gradient).
+
+        Args:
+            x: (N, input_dim) pre-flattened KAN input — T_triu concatenated
+               with scaled ε.  Obtain via  x, _, _ = model._flatten_inputs(T, eps).
+               Subsample to ~1024 voxels before calling for efficiency.
+
+        Returns:
+            Scalar tensor on the model's device / dtype.
+
+        Usage in training loop::
+
+            loss_task   = contraction_loss(xi_pred, xi_true)
+            x_kan, _, _ = model._flatten_inputs(T_M, eps_M)
+            idx          = torch.randperm(x_kan.shape[0])[:1024]
+            loss_sparse  = model.sparsity_loss(x_kan[idx].detach())
+            loss = loss_task + sparsity_lambda * loss_sparse
+        """
+        x = x.double()
+        reg = x.new_zeros(())
+        h   = x
+        for layer in self.layers:
+            clamp_lo = layer.grid[:, layer.k].min()
+            clamp_hi = layer.grid[:, layer.grid_size + layer.k].min() - 1e-7
+            h_c   = h.clamp(clamp_lo, clamp_hi)
+            basis = _b_spline_basis(h_c, layer.grid, layer.k)  # (N, n_in, G+k)
+
+            # Per-edge contributions: (N, n_out, n_in)
+            per_edge = (
+                torch.einsum("nik,oik->noi", basis, layer.spline_weight)
+                + layer.base_weight.unsqueeze(0) * F.silu(h).unsqueeze(1)
+            )
+            reg = reg + per_edge.abs().mean(0).sum()   # mean over N, sum over edges
+            h   = layer(h)                             # propagate to next layer
+        return reg
+
     # ── diagnostics ──────────────────────────────────────────────────────────
 
     def n_params(self) -> int:

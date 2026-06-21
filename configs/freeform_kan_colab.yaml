@@ -27,16 +27,16 @@ val_path:   /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
 # Samples per gradient step.  Each sample contributes N×N=64×64=4096 voxels,
 # so effective batch of pixel-level data = batch_size × 4096.
 # batch_size=8 → 32,768 data points/step — large enough, cheap enough.
-batch_size:  8
+batch_size:  16
 num_workers: 1
 
 # ── Model (FreeFormKANTauTheta) ────────────────────────────────────────────────
 # Architecture: [input_dim] + width + [output_dim]
-# For n_comp=3 (2D): input_dim=12, output_dim=3.
-#   depth-1  width=[18] → dims=[12,18,3]  → 2,430 params
-#   depth-2  width=[18,12] → dims=[12,18,12,3] → 4,212 params
-# Start with depth-1; switch to depth-2 if val_loss plateaus above 1%.
-width: [18, 12]      # hidden layer widths (list); try [18,12] for depth-2
+# For n_comp=3 (2D): input_dim=9 (6 upper-tri T + 3 ε), output_dim=3.
+#   depth-1  width=[18] → dims=[9,18,3]   → 1,944 params  ← theoretical minimum
+#   depth-2  width=[18,12] → dims=[9,18,12,3] → 3,672 params
+# Theoretical minimum hidden width: 18 (= 9 unique products × 2 neurons each).
+width: [18]      # hidden layer widths (list); try [18,12] for depth-2
 grid_size: 5     # B-spline grid intervals G; increase to 10 or 20 after Adam
 k: 3             # spline degree (cubic)
 x_range: [-2.0, 2.0]   # B-spline domain; covers T∈[-0.93,0.93] and scaled ε∈[-1.3,1.3]
@@ -46,8 +46,17 @@ x_range: [-2.0, 2.0]   # B-spline domain; covers T∈[-0.93,0.93] and scaled ε�
 # This is a fixed normalisation — not a structural prior.
 eps_input_scale: 100.0
 
+# ── Sparsity regularization ───────────────────────────────────────────────────
+# L1 penalty on edge function magnitudes: L = L_task + λ × Σ_edges mean|φ(x)|
+# Setting λ=0 disables the penalty entirely (pure relative-L2 loss).
+# With 9 inputs and width=[18], only 36/162 L1 edges should be active (22%).
+# The L1 penalty pushes the other 126 toward zero, making the active edges
+# easier to find.  Suggested starting range: 1e-4 to 1e-3.
+# Too large (> 0.01) → all edges collapse to zero.
+sparsity_lambda: 0.0
+
 # ── Optimizer / schedule (Adam phase) ─────────────────────────────────────────
-n_steps:      5000    # Adam gradient steps (not epochs — data is sampled per step)
+n_steps:      20000    # Adam gradient steps (not epochs — data is sampled per step)
 lr:           1.0e-3
 lr_min:       1.0e-5   # CosineAnnealingLR min LR
 weight_decay: 0.0
