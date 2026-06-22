@@ -56,7 +56,7 @@ eps_input_scale: 100.0
 sparsity_lambda: 0
 
 # ── Optimizer / schedule (Adam phase) ─────────────────────────────────────────
-n_steps:     5000    # Adam gradient steps (not epochs — data is sampled per step)
+n_steps:     10000    # Adam gradient steps (not epochs — data is sampled per step)
 lr:           1.0e-3
 lr_min:       1.0e-5   # CosineAnnealingLR min LR
 weight_decay: 0.0
