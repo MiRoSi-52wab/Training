@@ -1,0 +1,71 @@
+# configs/freeformkan_interpretability.yaml
+# Three-phase interpretability training for FreeFormKANTauTheta
+#
+# Phase 1  (§8):  Pure L2 — let the model find any working solution first
+# Phase 2  (§9):  Adaptive L1 sparsity — gently push redundant edges to zero
+# Pruning  (§11): Hard threshold — commit to the sparse support
+# Phase 3  (§12): Retrain with masks — recover accuracy on the sparse subnetwork
+#
+# Architecture: [9, 18, 9, 3] — two hidden layers with explicit semantic roles:
+#   L1 (9→18):  compute sum/difference of each (T_ij, ε_j) pair
+#   L2 (18→9):  squaring → product via (s²−d²)/4 = T_ij × ε_j
+#   L3 (9→3):   linear assembly: ξ_i = Σ_j T_ij ε_j
+# Theoretical active edges: 18+18+9 = 45 out of 162+162+27 = 351 (13%)
+
+experiment: experiment.yaml
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+train_path: /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
+val_path:   /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
+batch_size:  16
+num_workers: 1
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+width: [18, 9]       # hidden layer widths → dims=[9,18,9,3]
+grid_size: 5         # B-spline intervals G
+k: 3                 # spline degree (cubic)
+x_range: [-2.0, 2.0]
+eps_input_scale: 100.0
+
+# ── Phase 1: Pure L2 (no sparsity) ───────────────────────────────────────────
+# Goal: find any working solution before applying sparsity pressure.
+# Typical outcome: task_loss drops below 5% by step 10000.
+n_steps_phase1: 10000
+lr_phase1:      1.0e-3
+lr_min_phase1:  1.0e-5
+weight_decay:   0.0
+
+# ── Phase 2: Adaptive sparsity ────────────────────────────────────────────────
+# lambda is computed per-step:  lambda_eff = sparse_fraction × task_loss / L_sparse
+# This normalises the sparsity contribution to exactly `sparse_fraction` of the
+# task loss at every step, regardless of the absolute magnitude of L_sparse.
+# A linear ramp from 0 → sparse_fraction over the first 25% of Phase 2 avoids
+# a sudden shock to the already-converged model.
+n_steps_phase2:  5000
+lr_phase2:       1.0e-4    # lower LR: model is near-converged from Phase 1
+lr_min_phase2:   1.0e-6
+sparse_fraction: 0.10      # sparsity = 10% of task loss at steady state
+
+# ── Hard pruning ──────────────────────────────────────────────────────────────
+# An edge φᵢⱼ is pruned when its RMS norm over 200 uniform x points falls below
+# the threshold:  ‖φ‖ = sqrt(mean_x φ(x)²) < prune_threshold → zero + mask.
+# Pruned edges are held at zero throughout Phase 3 (projected gradient descent).
+prune_threshold: 0.05
+
+# ── Phase 3: Retrain with masks ───────────────────────────────────────────────
+# Train only the active (unmasked) edges; pruned edges are held at exactly zero.
+# Implementation: zero gradient AND zero weight after each optimizer step.
+n_steps_phase3: 5000
+lr_phase3:      1.0e-4
+lr_min_phase3:  1.0e-6
+
+# ── LBFGS (optional, after Phase 3) ──────────────────────────────────────────
+lbfgs_steps:      200
+lbfgs_batch_size: 4
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+output_dir: /content/drive/MyDrive/ls_kan_fno/runs/freeform_kan_interp
+save_every:  500
+log_every:   100
+val_every:   500
+seed: 42
