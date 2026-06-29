@@ -38,11 +38,17 @@ eps_scale: 0.02   # uniform sampling range for random ε — 0.02×100=2.0 = x_r
 lambda_sup:  1.0
 lambda_rec:  1.0
 lambda_zero: 0.1
+# T-linearity (same derivation as freeform_kan_colab.yaml — see there for notes):
+lambda_sup_T:  1.0   # T-midpoint: τ((T₁+T₂)/2,ε) = (τ(T₁,ε)+τ(T₂,ε))/2
+lambda_zero_T: 0.5   # T-zero: τ(0, ε) = 0
+
+# ── Gradient clipping ─────────────────────────────────────────────────────────
+grad_clip: 1.0
 
 # ── Phase 1: Pure L2 (no sparsity) ───────────────────────────────────────────
 # Goal: find any working solution before applying sparsity pressure.
 # Typical outcome: task_loss drops below 5% by step 10000.
-n_steps_phase1: 10000
+n_steps_phase1: 30000
 lr_phase1:      1.0e-3
 lr_min_phase1:  1.0e-5
 weight_decay:   0.0

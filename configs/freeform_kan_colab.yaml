@@ -86,6 +86,29 @@ eps_scale: 0.02
 lambda_sup:  1.0    # superposition in ε loss weight
 lambda_rec:  1.0    # reciprocity (major C-symmetry) loss weight
 lambda_zero: 0.1    # zero-at-zero loss weight
+#
+# ε-constraints alone are INSUFFICIENT for bilinearity.  They force τ linear
+# in ε, but the model can still learn τ(T,ε) = f(T)·ε with nonlinear f(T).
+# The mixed Hessian ∂²τ/∂T∂ε then varies across voxels → bilinearity fails.
+#
+# T-linearity constraints: derived from "τ = (C−α₀I):ε is linear in C, hence
+# in T = (C−α₀I)/α₀."  Combined with ε-linearity → bilinear τ(T,ε) = M:T:ε.
+# Task loss then identifies M=I (i.e., τ=T:ε) from data.
+#
+# T-midpoint  (lambda_sup_T):  τ((T₁+T₂)/2, ε) = (τ(T₁,ε)+τ(T₂,ε))/2
+#   Splits each batch in half: T₁ (first half) and T₂ (second half).
+#   Midpoint (T₁+T₂)/2 stays in the original T-range → no extrapolation.
+#
+# T-zero  (lambda_zero_T):  τ(0, ε) = 0
+#   T=0 means C=α₀I (reference stiffness) → zero polarized stress.
+#   Prevents learning a T-independent g(ε) that ignores T entirely.
+lambda_sup_T:  1.0   # T-midpoint (linearity in T) loss weight
+lambda_zero_T: 0.5   # T-zero loss weight
+
+# ── Gradient clipping ─────────────────────────────────────────────────────────
+# 7 forward passes per step (4 ε-passes + 3 T-passes at half batch-size).
+# Clipping at 1.0 prevents spikes from high-variance gradient estimates.
+grad_clip: 1.0
 
 # ── Sparsity regularization ───────────────────────────────────────────────────
 # L1 penalty on edge function magnitudes: L = L_task + λ × Σ_edges mean|φ(x)|
@@ -97,7 +120,7 @@ lambda_zero: 0.1    # zero-at-zero loss weight
 sparsity_lambda: 0
 
 # ── Optimizer / schedule (Adam phase) ─────────────────────────────────────────
-n_steps:     10000    # Adam gradient steps (not epochs — data is sampled per step)
+n_steps:     30000    # Adam gradient steps (not epochs — data is sampled per step)
 lr:           1.0e-3
 lr_min:       1.0e-5   # CosineAnnealingLR min LR
 weight_decay: 0.0
