@@ -55,6 +55,38 @@ eps_input_scale: 100.0
 # eps_scale=0.02 → KAN input range [-2, 2], covering the full spline domain.
 eps_scale: 0.02
 
+# ── Physics constraints (from linear elasticity theory) ──────────────────────
+# These regularizers inject physical knowledge without assuming the functional
+# form of τ.  Each is derivable from "the material is linearly elastic" alone.
+#
+# The training loop samples two independent half-scale strains per step:
+#   ε₁, ε₂ ~ Uniform[-eps_scale/2, eps_scale/2]  (sum stays within x_range)
+# This yields 4 forward passes per step: τ₁, τ₂, τ(ε₁+ε₂), τ(0).
+#
+# Superposition  (lambda_sup):  τ(T, ε₁+ε₂) = τ(T,ε₁) + τ(T,ε₂)
+#   Source: governing PDEs of linear elasticity are linear in ε for any C(x),
+#           including heterogeneous composites with inclusions.
+#   Effect: forces τ to be linear in ε — without specifying which linear form.
+#
+# Reciprocity  (lambda_rec):    ε₁·τ(T,ε₂) = ε₂·τ(T,ε₁)
+#   Source: major symmetry of C (C_{ijkl} = C_{klij}), which carries through
+#           to T = (C − α₀I)/α₀.
+#   Effect: forces the linear operator in ε to be symmetric.
+#
+# Zero at zero  (lambda_zero):  τ(T, 0) = 0
+#   Source: no prestress in linear elasticity; σ = C:ε = 0 when ε = 0.
+#   Effect: anchors the linear function through the origin.
+#
+# Together: narrow the search to "symmetric linear-in-ε vanishing at zero"
+# without assuming T:ε.  The KAN discovers the specific form from data.
+# Post-training: test T-linearity (superposition in T) to confirm bilinearity,
+# then read the Hessian pattern to identify the specific form T:ε.
+#
+# Set to 0.0 to disable individual constraints.
+lambda_sup:  1.0    # superposition in ε loss weight
+lambda_rec:  1.0    # reciprocity (major C-symmetry) loss weight
+lambda_zero: 0.1    # zero-at-zero loss weight
+
 # ── Sparsity regularization ───────────────────────────────────────────────────
 # L1 penalty on edge function magnitudes: L = L_task + λ × Σ_edges mean|φ(x)|
 # Setting λ=0 disables the penalty entirely (pure relative-L2 loss).

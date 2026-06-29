@@ -28,6 +28,17 @@ x_range: [-2.0, 2.0]
 eps_input_scale: 100.0
 eps_scale: 0.02   # uniform sampling range for random ε — 0.02×100=2.0 = x_range half-width
 
+# ── Physics constraints (from linear elasticity theory) ──────────────────
+# Same three constraints as freeform_kan_colab.yaml — applied in ALL three phases.
+# See that file for full derivation notes.
+#
+# Superposition  (lambda_sup):  τ(T, ε₁+ε₂) = τ(T,ε₁) + τ(T,ε₂)
+# Reciprocity    (lambda_rec):  ε₁·τ(T,ε₂) = ε₂·τ(T,ε₁)
+# Zero at zero   (lambda_zero): τ(T, 0) = 0
+lambda_sup:  1.0
+lambda_rec:  1.0
+lambda_zero: 0.1
+
 # ── Phase 1: Pure L2 (no sparsity) ───────────────────────────────────────────
 # Goal: find any working solution before applying sparsity pressure.
 # Typical outcome: task_loss drops below 5% by step 10000.
