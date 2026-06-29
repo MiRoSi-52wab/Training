@@ -19,8 +19,10 @@
 experiment: experiment.yaml    # physics constants (kappa, alpha0, N, dim, …)
 
 # ── Data ───────────────────────────────────────────────────────────────────────
-# Same dataset as Study 2.  T is computed from C_field inside the notebook;
-# eps_star is used as ε; ξ_true = T:ε_star is computed on the fly.
+# T is computed from C_field inside the notebook; ε is sampled randomly and
+# independently of T (NOT eps_star from the dataset — see §6 prep_batch).
+# ξ_true = T:ε is computed in closed form.  This forces the model to learn
+# the true bilinear law rather than exploiting (T, ε★) correlation shortcuts.
 train_path: /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
 val_path:   /content/drive/MyDrive/ls_kan_fno/data/dataset_v3.h5
 
@@ -45,6 +47,13 @@ x_range: [-2.0, 2.0]   # B-spline domain; covers T∈[-0.93,0.93] and scaled ε�
 # With eps_bar_scale=0.01 and T_max≈0.92, eps_input_scale=100 brings both to [-1,1].
 # This is a fixed normalisation — not a structural prior.
 eps_input_scale: 100.0
+
+# Range for randomly sampled ε during training.
+# ε is drawn uniformly from [-eps_scale, eps_scale] per voxel per component,
+# independently of T.  After eps_input_scale multiplication the KAN sees values
+# in [-eps_scale*100, eps_scale*100] — keep this within x_range=[-2,2].
+# eps_scale=0.02 → KAN input range [-2, 2], covering the full spline domain.
+eps_scale: 0.02
 
 # ── Sparsity regularization ───────────────────────────────────────────────────
 # L1 penalty on edge function magnitudes: L = L_task + λ × Σ_edges mean|φ(x)|
